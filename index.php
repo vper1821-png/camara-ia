@@ -2,40 +2,37 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Seguridad IA - camara-ia</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Camara IA - Módulo de Seguridad</title>
     <link rel="stylesheet" href="style.css">
-    <!-- TensorFlow.js y YOLO-TFJS -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+    <!-- TensorFlow.js y COCO-SSD -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
-    <script src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js"></script>
     <script src="script.js" defer></script>
 </head>
 <body>
     <div class="container">
-        <h1>🔒 Módulo de Seguridad IA - camara-ia</h1>
+        <h1>🔒 Módulo de Seguridad con IA</h1>
         <div class="source-selector">
-            <button id="btn-webcam" class="active">🌐 Webcam local</button>
-            <button id="btn-hikvision">📷 Cámara Hikvision</button>
+            <button id="btn-mjpeg" class="active">📱 Cámara Celular (MJPEG)</button>
         </div>
         <div class="video-wrapper">
-    <img id="video-source" style="display:none;" />  <!-- se creará dinámicamente -->
-    <canvas id="overlay"></canvas>
-</div>
+            <img id="video-source" class="video-img" alt="Stream MJPEG" />
+            <canvas id="overlay"></canvas>
+        </div>
         <div class="stats">
-            <p>👥 Personas: <span id="people-count">0</span></p>
-            <p>🔫 Armas: <span id="weapon-alert">0</span></p>
-            <p>🚗 Patente: <span id="plate-text">---</span></p>
-            <p>😀 Rostro: <span id="face-status">---</span></p>
+            <p>👥 Personas detectadas: <span id="people-count">0</span></p>
+            <p>🔫 Armas detectadas: <span id="weapon-alert">0</span></p>
+            <p>🚗 Última patente: <span id="plate-text">---</span></p>
+            <p>😀 Estado: <span id="face-status">---</span></p>
         </div>
         <div class="controls">
             <button id="btn-capture-plate">📸 Capturar patente</button>
-            <button id="btn-save-face" disabled>💾 Guardar rostro confiable</button>
-            <button id="btn-save-danger" disabled>⚠️ Guardar rostro peligroso</button>
-            <button id="btn-snapshot-hik">🖼️ Snapshot Hikvision</button>
+            <button id="btn-save-face" disabled>💾 Guardar rostro (próximamente)</button>
+            <button id="btn-refresh">🔄 Reiniciar detección</button>
         </div>
         <div class="log">
-            <h3>📋 Eventos</h3>
+            <h3>📋 Eventos recientes</h3>
             <ul id="event-log"></ul>
         </div>
     </div>
