@@ -1,7 +1,5 @@
-// script.js - Versión con soporte MJPEG y cámara de prueba
-
 // Elementos DOM
-const videoContainer = document.getElementById('video-source');
+const videoImg = document.getElementById('video-source');
 const canvas = document.getElementById('overlay');
 const ctx = canvas.getContext('2d');
 const peopleCountSpan = document.getElementById('people-count');
@@ -9,206 +7,187 @@ const weaponAlertSpan = document.getElementById('weapon-alert');
 const plateTextSpan = document.getElementById('plate-text');
 const faceStatusSpan = document.getElementById('face-status');
 const eventLogUl = document.getElementById('event-log');
-const btnSaveFace = document.getElementById('btn-save-face');
-const btnSaveDanger = document.getElementById('btn-save-danger');
 const btnCapturePlate = document.getElementById('btn-capture-plate');
-const btnSnapshotHik = document.getElementById('btn-snapshot-hik');
+const btnRefresh = document.getElementById('btn-refresh');
+const btnMjpeg = document.getElementById('btn-mjpeg');
+
+// Configuración de la cámara del celular
+const CELULAR_URL = 'http://192.168.1.21:8080/video'; // ✅ URL que funciona
 
 let cocoModel = null;
-let faceMatcher = null;
-let currentMode = 'webcam'; // 'webcam' o 'mjpeg'
 let detectionInterval = null;
-
-// URL de cámara MJPEG de prueba (Universidad de Heidelberg)
-const TEST_MJPEG_URL = 'http://192.168.1.21:8080/video.mjpg';
-
+let lastWeaponLogged = false;
 
 // Inicialización
 window.addEventListener('load', async () => {
-    await setupWebcam();
-    await loadModels();
+    // Mostrar mensaje de carga
+    faceStatusSpan.innerText = 'Cargando modelo IA...';
+    await loadModel();
+    await startMjpegStream();
     startDetectionLoop();
     setupEventListeners();
 });
 
-// Cámara web local
-async function setupWebcam() {
+// Cargar modelo COCO-SSD
+async function loadModel() {
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        videoContainer.srcObject = stream;
-        await new Promise((resolve) => (videoContainer.onloadedmetadata = resolve));
-        canvas.width = videoContainer.videoWidth;
-        canvas.height = videoContainer.videoHeight;
-        currentMode = 'webcam';
+        console.log('Cargando COCO-SSD...');
+        cocoModel = await cocoSsd.load();
+        console.log('COCO-SSD listo');
+        faceStatusSpan.innerText = 'Modelo listo';
     } catch (err) {
-        console.error('Error al acceder a la cámara web:', err);
-        alert('No se pudo acceder a la cámara web. Usando modo MJPEG de prueba.');
-        switchToMjpeg();
+        console.error('Error cargando modelo:', err);
+        faceStatusSpan.innerText = 'Error cargando modelo';
     }
 }
 
-// Cambiar a fuente MJPEG (reemplaza el elemento <video> por <img>)
-function switchToMjpeg() {
-    // Detener streams previos si existen
-    if (videoContainer.srcObject) {
-        videoContainer.srcObject.getTracks().forEach(track => track.stop());
-    }
-    // Crear elemento img
-    const img = document.createElement('img');
-    img.id = 'video-source';
-    img.className = videoContainer.className;
-    img.src = TEST_MJPEG_URL;
-    img.alt = 'MJPEG Stream';
-    img.style.width = '100%';
-    img.style.height = 'auto';
-    // Reemplazar
-    videoContainer.parentNode.replaceChild(img, videoContainer);
-    // Actualizar referencia global
-    window.videoSource = img;
-    // Ajustar canvas al tamaño de la imagen (cuando cargue)
-    img.onload = () => {
-        canvas.width = img.width;
-        canvas.height = img.height;
-    };
-    currentMode = 'mjpeg';
-    console.log('Modo MJPEG activado con URL:', TEST_MJPEG_URL);
-}
-
-// Cargar modelos COCO-SSD y face-api
-async function loadModels() {
-    console.log('Cargando COCO-SSD...');
-    cocoModel = await cocoSsd.load();
-    console.log('COCO-SSD listo');
+// Iniciar stream MJPEG desde el celular
+async function startMjpegStream() {
+    videoImg.src = CELULAR_URL;
+    videoImg.crossOrigin = 'Anonymous'; // Intentar evitar CORS si es posible
     
-    // Face-api (modelos desde CDN)
-    const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
-    await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-    await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-    await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-    console.log('Face-api listo');
+    // Esperar a que la imagen cargue para ajustar canvas
+    videoImg.onload = () => {
+        canvas.width = videoImg.naturalWidth;
+        canvas.height = videoImg.naturalHeight;
+        console.log(`Stream MJPEG cargado: ${canvas.width}x${canvas.height}`);
+        faceStatusSpan.innerText = 'Stream activo';
+    };
+    videoImg.onerror = () => {
+        console.error('Error al cargar el stream MJPEG');
+        faceStatusSpan.innerText = 'Error: No se pudo cargar el stream';
+        alert('No se pudo cargar el stream del celular. Verifica que la URL sea accesible desde el pod.');
+    };
 }
 
-// Bucle de detección (cada 1 segundo para no saturar)
+// Bucle de detección (cada 1 segundo)
 function startDetectionLoop() {
     if (detectionInterval) clearInterval(detectionInterval);
     detectionInterval = setInterval(async () => {
-        if (!cocoModel) return;
+        if (!cocoModel || !videoImg.complete || videoImg.naturalWidth === 0) return;
         
-        let sourceElement = document.getElementById('video-source');
-        if (!sourceElement) return;
-        
-        // Si es imagen MJPEG, usarla; si es video, usar el video
-        let inputElement = sourceElement;
-        if (sourceElement.tagName === 'IMG') {
-            // Para MJPEG, necesitamos dibujar la imagen en un canvas para que face-api la procese
-            // Pero COCO-SSD también acepta imágenes. Lo haremos con un canvas temporal.
-            if (!sourceElement.complete || sourceElement.naturalWidth === 0) return;
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = sourceElement.naturalWidth;
-            tempCanvas.height = sourceElement.naturalHeight;
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCtx.drawImage(sourceElement, 0, 0);
-            inputElement = tempCanvas;
+        try {
+            // Realizar detección en la imagen actual
+            const predictions = await cocoModel.detect(videoImg);
+            processDetections(predictions);
+            drawDetections(predictions);
+        } catch (err) {
+            console.error('Error en detección:', err);
         }
-        
-        // Detección COCO-SSD
-        const predictions = await cocoModel.detect(inputElement);
-        processDetections(predictions);
-        drawBoxes(predictions, inputElement);
-        
-        // Detección facial (solo si tenemos un elemento válido)
-        if (inputElement && inputElement.width > 0) {
-            const detections = await faceapi.detectAllFaces(inputElement, new faceapi.TinyFaceDetectorOptions())
-                .withFaceLandmarks()
-                .withFaceDescriptors();
-            processFaces(detections);
-        }
-    }, 1000);
+    }, 1000); // 1 segundo
 }
 
-// Procesar detecciones COCO (personas, armas)
+// Procesar detecciones (personas y armas)
 function processDetections(predictions) {
-    let people = 0, weapons = 0;
-    const weaponClasses = ['knife', 'scissors', 'baseball bat'];
+    let people = 0;
+    let weapons = 0;
+    const weaponClasses = ['knife', 'scissors', 'baseball bat', 'scissors'];
+    
     predictions.forEach(pred => {
         if (pred.class === 'person') people++;
-        if (weaponClasses.includes(pred.class)) weapons++;
+        if (weaponClasses.includes(pred.class.toLowerCase())) weapons++;
     });
+    
+    // Actualizar UI
     peopleCountSpan.innerText = people;
     weaponAlertSpan.innerText = weapons;
-    if (weapons > 0 && !window.lastWeaponLogged) {
-        logEvent('weapon', `Arma detectada (${weapons} objeto(s))`);
-        window.lastWeaponLogged = true;
-        setTimeout(() => { window.lastWeaponLogged = false; }, 10000);
+    
+    // Registrar evento de arma (solo una vez cada 10 seg)
+    if (weapons > 0 && !lastWeaponLogged) {
+        logEvent('weapon', `⚠️ ARMA detectada (${weapons} objeto(s))`);
+        lastWeaponLogged = true;
+        setTimeout(() => { lastWeaponLogged = false; }, 10000);
+    }
+    
+    // Registrar conteo de personas si cambia significativamente
+    if (window.lastPersonCount !== people) {
+        if (people > 0) {
+            logEvent('person_count', `👥 Personas detectadas: ${people}`);
+        }
+        window.lastPersonCount = people;
     }
 }
 
-// Dibujar bounding boxes
-function drawBoxes(predictions, sourceElement) {
+// Dibujar bounding boxes en el canvas
+function drawDetections(predictions) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (!sourceElement) return;
-    // Ajustar canvas al tamaño de la fuente
-    canvas.width = sourceElement.width || sourceElement.naturalWidth;
-    canvas.height = sourceElement.height || sourceElement.naturalHeight;
     
     predictions.forEach(pred => {
         const [x, y, w, h] = pred.bbox;
-        let color = pred.class === 'person' ? 'lime' : 'red';
+        let color = 'cyan';
+        if (pred.class === 'person') color = 'lime';
+        const weaponClasses = ['knife', 'scissors', 'baseball bat'];
+        if (weaponClasses.includes(pred.class.toLowerCase())) color = 'red';
+        
         ctx.strokeStyle = color;
         ctx.lineWidth = 2;
         ctx.strokeRect(x, y, w, h);
+        
         ctx.fillStyle = color;
         ctx.font = '16px Arial';
         ctx.fillText(`${pred.class} (${Math.round(pred.score*100)}%)`, x, y-5);
     });
 }
 
-// Procesar rostros (placeholder, puedes ampliar después)
-function processFaces(detections) {
-    if (detections && detections.length > 0) {
-        faceStatusSpan.innerText = `${detections.length} rostro(s) detectado(s)`;
-    } else {
-        faceStatusSpan.innerText = 'Ninguno';
-    }
+// Capturar patente (simulado por ahora)
+async function capturePlate() {
+    plateTextSpan.innerText = 'Leyendo...';
+    // Aquí se puede implementar Tesseract.js más adelante
+    setTimeout(() => {
+        const mockPlate = 'ABC123';
+        plateTextSpan.innerText = mockPlate;
+        logEvent('plate', `Patente simulada: ${mockPlate}`);
+    }, 1500);
 }
 
-// Registrar eventos en el servidor
+// Registrar evento en el servidor y en la UI
 async function logEvent(type, description) {
     try {
+        // Intentar guardar en backend PHP (si está configurado)
+        const payload = { event_type: type, description: description, image_path: '' };
         await fetch('api/log_event.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ event_type: type, description: description })
-        });
-        const li = document.createElement('li');
-        li.textContent = `${new Date().toLocaleTimeString()} - ${type}: ${description}`;
-        eventLogUl.prepend(li);
-        if (eventLogUl.children.length > 20) eventLogUl.removeChild(eventLogUl.lastChild);
+            body: JSON.stringify(payload)
+        }).catch(e => console.log('Backend no disponible, solo log local'));
     } catch (err) {
-        console.error('Error log:', err);
+        // Si falla, solo mostrar en UI
+    }
+    
+    // Mostrar en la UI siempre
+    const li = document.createElement('li');
+    li.textContent = `${new Date().toLocaleTimeString()} - ${type}: ${description}`;
+    eventLogUl.prepend(li);
+    if (eventLogUl.children.length > 20) {
+        eventLogUl.removeChild(eventLogUl.lastChild);
     }
 }
 
-// Configurar botones
+// Configurar eventos de botones
 function setupEventListeners() {
-    document.getElementById('btn-webcam').onclick = async () => {
-        await setupWebcam();
-        currentMode = 'webcam';
-    };
-    document.getElementById('btn-hikvision').onclick = () => {
-        switchToMjpeg();
-        currentMode = 'mjpeg';
-    };
-    btnCapturePlate.onclick = () => {
-        alert('Captura de patente aún no implementada con MJPEG');
-    };
-    btnSaveFace.onclick = () => {
-        alert('Guardado de rostro aún no implementado');
-    };
-    btnSaveDanger.onclick = () => {
-        alert('Guardado de rostro peligroso aún no implementado');
-    };
-    btnSnapshotHik.onclick = () => {
-        alert('Snapshot manual: ' + TEST_MJPEG_URL);
-    };
+    btnMjpeg.addEventListener('click', () => {
+        // Reiniciar el stream (recargar la imagen)
+        videoImg.src = CELULAR_URL;
+        logEvent('system', 'Stream MJPEG reiniciado manualmente');
+    });
+    
+    btnCapturePlate.addEventListener('click', capturePlate);
+    
+    btnRefresh.addEventListener('click', () => {
+        // Limpiar canvas y reiniciar contadores visuales
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        peopleCountSpan.innerText = '0';
+        weaponAlertSpan.innerText = '0';
+        plateTextSpan.innerText = '---';
+        faceStatusSpan.innerText = 'Reiniciado';
+        logEvent('system', 'Sistema reiniciado por usuario');
+        setTimeout(() => {
+            faceStatusSpan.innerText = 'Stream activo';
+        }, 2000);
+    });
 }
+
+// (Opcional) Guardar rostro - placeholder
+document.getElementById('btn-save-face').addEventListener('click', () => {
+    alert('Función de guardar rostro disponible en próxima versión');
+});
