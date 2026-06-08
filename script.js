@@ -20,7 +20,8 @@ let currentMode = 'webcam'; // 'webcam' o 'mjpeg'
 let detectionInterval = null;
 
 // URL de cámara MJPEG de prueba (Universidad de Heidelberg)
-const TEST_MJPEG_URL = 'http://pendelcam.kip.uni-heidelberg.de/mjpg/video.mjpg';
+const TEST_MJPEG_URL = 'http://192.168.1.21:8080/video.mjpg';
+
 
 // Inicialización
 window.addEventListener('load', async () => {
