@@ -19,9 +19,9 @@
             <button id="btn-hikvision">📷 Cámara Hikvision</button>
         </div>
         <div class="video-wrapper">
-            <video id="video-source" autoplay playsinline muted></video>
-            <canvas id="overlay"></canvas>
-        </div>
+    <img id="video-source" style="display:none;" />  <!-- se creará dinámicamente -->
+    <canvas id="overlay"></canvas>
+</div>
         <div class="stats">
             <p>👥 Personas: <span id="people-count">0</span></p>
             <p>🔫 Armas: <span id="weapon-alert">0</span></p>
