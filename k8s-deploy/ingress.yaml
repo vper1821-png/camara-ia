@@ -1,0 +1,16 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: camara-ia-ingress
+  namespace: camaras-ia
+spec:
+  rules:
+  - host: camara-ia.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: camara-ia-service
+            port: { number: 80 }

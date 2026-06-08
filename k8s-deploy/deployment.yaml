@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: camara-ia-app
+  namespace: camaras-ia
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: camara-ia }
+  template:
+    metadata:
+      labels: { app: camara-ia }
+    spec:
+      nodeSelector: { kubernetes.io/hostname: workernv2 }
+      containers:
+      - name: php-app
+        image: camara-ia:latest   # Cambiar por tu imagen real
+        ports:
+        - containerPort: 80
+        envFrom:
+        - configMapRef: { name: camara-ia-config }
+        - secretRef: { name: hikvision-creds }
+        volumeMounts:
+        - name: storage
+          mountPath: /var/www/html/uploads
+      volumes:
+      - name: storage
+        persistentVolumeClaim: { claimName: camara-ia-storage }

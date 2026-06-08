@@ -1,0 +1,40 @@
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #1e1e2f;
+    color: #eee;
+    margin: 0;
+    padding: 20px;
+}
+.container { max-width: 1200px; margin: auto; }
+.source-selector { text-align: center; margin-bottom: 15px; }
+.source-selector button {
+    background: #2a2a3b; border: 2px solid #3a6ea5;
+    padding: 8px 20px; margin: 0 5px; cursor: pointer;
+}
+.source-selector button.active { background: #3a6ea5; border-color: #ffd700; }
+.video-wrapper {
+    position: relative; width: 100%; max-width: 800px; margin: 0 auto;
+    border-radius: 12px; overflow: hidden;
+}
+video, canvas {
+    position: absolute; top: 0; left: 0; width: 100%; height: auto;
+}
+video { position: relative; z-index: 1; }
+canvas { z-index: 2; pointer-events: none; }
+.stats {
+    display: flex; flex-wrap: wrap; justify-content: space-around;
+    background: #2a2a3b; padding: 15px; border-radius: 15px; margin: 20px 0;
+}
+.stats p { margin: 5px 15px; font-weight: bold; }
+.controls { text-align: center; margin-top: 20px; }
+button {
+    background: #3a6ea5; border: none; color: white; padding: 10px 20px;
+    margin: 5px; border-radius: 30px; cursor: pointer;
+}
+button:disabled { background: #555; cursor: not-allowed; }
+.log {
+    background: #0f0f1a; padding: 10px 20px; border-radius: 15px;
+    max-height: 250px; overflow-y: auto;
+}
+.log ul { list-style: none; padding-left: 0; }
+.log li { padding: 6px; border-bottom: 1px solid #333; }
